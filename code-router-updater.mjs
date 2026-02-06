@@ -118,7 +118,7 @@ async function fetchModels({ apiKey, noAuth, timeoutMs }) {
   }
 }
 
-function buildModels(models) {
+function buildModels(models, existingModels = {}) {
   const result = {};
   for (const model of models) {
     if (!model || !model.id) continue;
@@ -126,10 +126,47 @@ function buildModels(models) {
       typeof model.name === "string" && model.name.trim().length > 0
         ? model.name.trim()
         : nameFromId(model.id);
-    result[model.id] = { name };
+    const existingEntry =
+      existingModels && typeof existingModels === "object"
+        ? existingModels[model.id]
+        : undefined;
+    const mergedEntry =
+      existingEntry && typeof existingEntry === "object"
+        ? { ...existingEntry, name }
+        : { name };
+
+    if (model.id.endsWith(":free")) {
+      if (!mergedEntry.options || typeof mergedEntry.options !== "object") {
+        mergedEntry.options = {};
+      }
+      if (
+        !mergedEntry.options.OpenRouter ||
+        typeof mergedEntry.options.OpenRouter !== "object"
+      ) {
+        mergedEntry.options.OpenRouter = {};
+      }
+      if (
+        !mergedEntry.options.OpenRouter.provider ||
+        typeof mergedEntry.options.OpenRouter.provider !== "object"
+      ) {
+        mergedEntry.options.OpenRouter.provider = {};
+      }
+      if (!Array.isArray(mergedEntry.options.OpenRouter.provider.order)) {
+        mergedEntry.options.OpenRouter.provider.order = [];
+      }
+    }
+
+    result[model.id] = mergedEntry;
   }
   if (!result["openrouter/free"]) {
-    result["openrouter/free"] = { name: "OpenRouter Free" };
+    const existingEntry =
+      existingModels && typeof existingModels === "object"
+        ? existingModels["openrouter/free"]
+        : undefined;
+    result["openrouter/free"] =
+      existingEntry && typeof existingEntry === "object"
+        ? { ...existingEntry, name: "OpenRouter Free" }
+        : { name: "OpenRouter Free" };
   }
   return result;
 }
@@ -202,13 +239,20 @@ async function main() {
     timeoutMs: args.timeoutMs,
   });
 
-  const modelsBlock = buildModels(models);
+  const existingConfig = await readExistingConfig(configPath);
+  const existingModels =
+    existingConfig &&
+    existingConfig.provider &&
+    existingConfig.provider.openrouter &&
+    existingConfig.provider.openrouter.models
+      ? existingConfig.provider.openrouter.models
+      : {};
+  const modelsBlock = buildModels(models, existingModels);
 
   if (Object.keys(modelsBlock).length === 0) {
     console.warn("Внимание: список моделей пустой.");
   }
 
-  const existingConfig = await readExistingConfig(configPath);
   const config = mergeOpenRouterModels(existingConfig, modelsBlock);
 
   const backedUp = await backupFileIfExists(configPath, backupPath);
