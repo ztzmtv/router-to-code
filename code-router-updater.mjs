@@ -153,6 +153,41 @@ async function writeConfig(configPath, config) {
   await fs.writeFile(configPath, content, "utf8");
 }
 
+async function readExistingConfig(configPath) {
+  try {
+    const raw = await fs.readFile(configPath, "utf8");
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err && err.code === "ENOENT") return null;
+    throw new Error(
+      `Не удалось прочитать конфиг (${configPath}). Проверьте, что это валидный JSON.`
+    );
+  }
+}
+
+function mergeOpenRouterModels(existingConfig, modelsBlock) {
+  const base =
+    existingConfig && typeof existingConfig === "object"
+      ? existingConfig
+      : {};
+
+  if (!base.provider || typeof base.provider !== "object") {
+    base.provider = {};
+  }
+
+  if (!base.provider.openrouter || typeof base.provider.openrouter !== "object") {
+    base.provider.openrouter = {};
+  }
+
+  base.provider.openrouter.models = modelsBlock;
+
+  if (!base.$schema) {
+    base.$schema = "https://opencode.ai/config.json";
+  }
+
+  return base;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const configPath = expandHome(args.config);
@@ -170,14 +205,8 @@ async function main() {
     console.warn("Внимание: список моделей пустой.");
   }
 
-  const config = {
-    $schema: "https://opencode.ai/config.json",
-    provider: {
-      openrouter: {
-        models: modelsBlock,
-      },
-    },
-  };
+  const existingConfig = await readExistingConfig(configPath);
+  const config = mergeOpenRouterModels(existingConfig, modelsBlock);
 
   const backedUp = await backupFileIfExists(configPath, backupPath);
   await writeConfig(configPath, config);
