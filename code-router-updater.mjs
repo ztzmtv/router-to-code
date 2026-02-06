@@ -128,6 +128,9 @@ function buildModels(models) {
         : nameFromId(model.id);
     result[model.id] = { name };
   }
+  if (!result["openrouter/free"]) {
+    result["openrouter/free"] = { name: "OpenRouter Free" };
+  }
   return result;
 }
 
